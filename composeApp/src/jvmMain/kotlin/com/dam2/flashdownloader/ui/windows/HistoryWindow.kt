@@ -15,27 +15,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowState
-import androidx.compose.ui.window.application
 import com.dam2.flashdownloader.domain.model.Category
 import com.dam2.flashdownloader.domain.model.DownloadHistoryEntry
 import com.dam2.flashdownloader.ui.utils.formatBytes
 import java.text.SimpleDateFormat
 import java.util.*
-
-
-/**
- * Función de pruebas para previsualizar la pantalla del historial de descargas
- */
-fun main() = application {
-    HistoryWindow(
-        onCloseRequest = ::exitApplication,
-        historyEntries = emptyList(),
-        onClearHistory = {},
-        onRemoveEntry = {},
-        onOpenFile = {}
-    )
-}
-
 
 /**
  * Ventana de historial de descargas completadas
