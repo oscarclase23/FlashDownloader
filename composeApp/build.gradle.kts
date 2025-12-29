@@ -20,6 +20,7 @@ kotlin {
     
     sourceSets {
         androidMain.dependencies {
+            implementation("androidx.core:core-ktx:1.12.0")
             implementation(compose.preview)
             implementation(libs.androidx.activity.compose)
         }
@@ -34,6 +35,7 @@ kotlin {
             implementation(libs.androidx.lifecycle.viewmodelCompose)
             implementation(libs.androidx.lifecycle.runtimeCompose)
             implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.0")
+            implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
