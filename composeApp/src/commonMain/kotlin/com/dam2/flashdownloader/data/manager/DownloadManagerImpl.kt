@@ -95,10 +95,10 @@ class DownloadManagerImpl(
         // Cargar configuración guardada
         _maxConcurrentDownloads.value = settingsRepository.getMaxConcurrentDownloads()
         _globalSpeedLimit.value = settingsRepository.getGlobalSpeedLimit()
-
+        
         // Actualizar semaphore con el valor cargado
         downloadSemaphore = Semaphore(_maxConcurrentDownloads.value)
-
+        
         // Iniciar actualizador de estadísticas
         startStatisticsUpdater()
     }
@@ -247,7 +247,7 @@ class DownloadManagerImpl(
 
         // Obtener información del archivo antes de eliminar
         val download = _downloadsList.find { it.id == id }
-
+        
         // Eliminar archivo físico si se solicita
         if (deleteFile && download != null) {
             val fullPath = "$downloadPath/${download.fileName}"
@@ -355,7 +355,7 @@ class DownloadManagerImpl(
 
         Result.success(Unit)
     }
-
+    
     override suspend fun reorderDownload(fromIndex: Int, toIndex: Int): Result<Unit> = downloadsMutex.withLock {
         // Validar índices
         if (fromIndex < 0 || fromIndex >= _downloadsList.size) {
@@ -367,19 +367,19 @@ class DownloadManagerImpl(
         if (fromIndex == toIndex) {
             return Result.success(Unit) // No hay cambio
         }
-
+        
         // Mover el elemento
         val item = _downloadsList.removeAt(fromIndex)
         _downloadsList.add(toIndex, item)
-
+        
         // Actualizar UI
         updateDownloadsFlow()
-
+        
         // Persistir cambios
         _downloadsList.forEach { download ->
             repository.updateDownload(download)
         }
-
+        
         Result.success(Unit)
     }
 
@@ -446,7 +446,7 @@ class DownloadManagerImpl(
         val maxRetries = 3
         var retryCount = 0
         var lastException: Exception? = null
-
+        
         // Record start time for elapsed time tracking
         val downloadStartTime = System.currentTimeMillis()
 
@@ -464,7 +464,7 @@ class DownloadManagerImpl(
                             metadata.totalBytes
                         )
                     }
-
+                    
                     if (!hasSpace) {
                         updateDownloadStatus(
                             id,
@@ -598,7 +598,7 @@ class DownloadManagerImpl(
                     ),
                     forcePersist = true  // ✅ Persistir inmediatamente
                 )
-
+                
                 // Success - exit retry loop
                 return
 
@@ -609,12 +609,12 @@ class DownloadManagerImpl(
                 // Network error - retry
                 lastException = e
                 retryCount++
-
+                
                 if (retryCount <= maxRetries) {
                     // Wait before retry (exponential backoff: 2s, 4s, 8s)
                     val delayMs = 2000L * (1 shl (retryCount - 1))
                     delay(delayMs)
-
+                    
                     // Update status to show retry attempt
                     val currentBytes = downloadsMutex.withLock {
                         _downloadsList.find { it.id == id }?.downloadedBytes ?: 0L
@@ -706,7 +706,7 @@ class DownloadManagerImpl(
     private fun startStatisticsUpdater() {
         statisticsJob = scope.launch(Dispatchers.IO) {
             val previousBytes = mutableMapOf<String, Long>()
-
+            
             while (isActive) {
                 delay(1000) // Actualizar cada segundo
 
@@ -772,7 +772,7 @@ class DownloadManagerImpl(
 
     /**
      * Actualiza el estado de una descarga con persistencia optimizada
-     *
+     * 
      * @param id ID de la descarga
      * @param status Nuevo estado
      * @param forcePersist Si es true, persiste inmediatamente sin importar el tiempo
@@ -788,12 +788,12 @@ class DownloadManagerImpl(
                 // ✅ SIEMPRE actualiza en memoria (UI fluida)
                 _downloadsList[index] = _downloadsList[index].copy(status = status)
                 updateDownloadsFlow()
-
+                
                 // ✅ Persistencia inteligente
-                val shouldPersist = forcePersist ||
-                        status.isCriticalState() ||
-                        shouldPersistByTime(id)
-
+                val shouldPersist = forcePersist || 
+                    status.isCriticalState() ||
+                    shouldPersistByTime(id)
+                
                 if (shouldPersist) {
                     // Persistir en BD (en IO dispatcher)
                     withContext(Dispatchers.IO) {
@@ -809,7 +809,7 @@ class DownloadManagerImpl(
             }
         }
     }
-
+    
     /**
      * Verifica si debe persistir basado en el tiempo transcurrido
      */
@@ -817,7 +817,7 @@ class DownloadManagerImpl(
         val lastTime = lastPersistTime[id] ?: 0L
         return (System.currentTimeMillis() - lastTime) >= PERSIST_INTERVAL_MS
     }
-
+    
     /**
      * Determina si un estado es crítico y debe persistirse inmediatamente
      */
@@ -837,7 +837,7 @@ class DownloadManagerImpl(
         val download = downloadsMutex.withLock {
             _downloadsList.find { it.id == id }
         } ?: return Result.failure(Exception("Descarga no encontrada"))
-
+        
         return when (val status = download.status) {
             is DownloadStatus.Completed -> {
                 val calculatedHash = status.calculatedHash
@@ -889,13 +889,13 @@ class DownloadManagerImpl(
             if (limit < 1) {
                 return Result.failure(IllegalArgumentException("El límite debe ser al menos 1"))
             }
-
+            
             _maxConcurrentDownloads.value = limit
             downloadSemaphore = Semaphore(limit)
-
+            
             // Guardar en repositorio
             settingsRepository.setMaxConcurrentDownloads(limit)
-
+            
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -905,10 +905,10 @@ class DownloadManagerImpl(
     override suspend fun setGlobalSpeedLimit(bytesPerSecond: Long?): Result<Unit> {
         return try {
             _globalSpeedLimit.value = bytesPerSecond
-
+            
             // Guardar en repositorio
             settingsRepository.setGlobalSpeedLimit(bytesPerSecond)
-
+            
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
