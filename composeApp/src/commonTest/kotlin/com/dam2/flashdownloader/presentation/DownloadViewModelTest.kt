@@ -1,7 +1,6 @@
 package com.dam2.flashdownloader.presentation
 
 import com.dam2.flashdownloader.data.repository.MockPersistentStorage
-import com.dam2.flashdownloader.data.repository.DownloadRepositoryImpl
 import com.dam2.flashdownloader.domain.model.*
 import com.dam2.flashdownloader.domain.repository.DownloadRepository
 import com.dam2.flashdownloader.platform.NotificationManager
