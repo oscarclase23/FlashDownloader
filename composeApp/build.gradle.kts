@@ -77,6 +77,18 @@ kotlin {
         val commonTest by getting {
             dependencies {
                 implementation(libs.kotlin.test)
+                
+                // MockK for mocking
+                implementation("io.mockk:mockk:1.13.8")
+                
+                // Turbine for Flow testing
+                implementation("app.cash.turbine:turbine:1.0.0")
+                
+                // Coroutines Test
+                implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
+                
+                // Ktor Client Mock
+                implementation("io.ktor:ktor-client-mock:2.3.7")
             }
         }
     }
