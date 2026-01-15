@@ -4,7 +4,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.dam2.flashdownloader.domain.manager.DownloadManager
 import com.dam2.flashdownloader.domain.model.*
-import com.dam2.flashdownloader.domain.repository.SettingsRepository
 import com.dam2.flashdownloader.utils.ClipboardManager
 import com.dam2.flashdownloader.utils.extractUrls
 import com.dam2.flashdownloader.utils.isValidUrl
@@ -17,7 +16,6 @@ import kotlinx.coroutines.launch
  */
 class DownloadViewModel(
     private val downloadManager: DownloadManager,
-    private val settingsRepository: SettingsRepository,
     private val clipboardManager: ClipboardManager
 ) : ViewModel() {
 
@@ -29,7 +27,7 @@ class DownloadViewModel(
     val downloads: StateFlow<List<DownloadItem>> = downloadManager.downloads
         .stateIn(
             scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
+            started = SharingStarted.Eagerly,  // ✅ CRÍTICO: Siempre activo para actualizaciones en tiempo real
             initialValue = emptyList()
         )
 
@@ -84,9 +82,6 @@ class DownloadViewModel(
     // SECCIÓN 2: INICIALIZACIÓN
 
     init {
-        // Cargar tema guardado
-        _isDarkTheme.value = settingsRepository.getIsDarkTheme()
-
         loadSavedDownloads()
         observeClipboard()
     }
@@ -146,7 +141,8 @@ class DownloadViewModel(
         fileName: String? = null,
         category: Category? = null,
         priority: Priority = Priority.MEDIUM,
-        speedLimit: Long? = null
+        speedLimit: Long? = null,
+        hash: String? = null
     ) {
         viewModelScope.launch {
             if (!url.isValidUrl()) {
@@ -156,7 +152,7 @@ class DownloadViewModel(
 
             _uiState.update { it.copy(isLoading = true) }
 
-            downloadManager.addDownload(url, fileName, category, priority, speedLimit)
+            downloadManager.addDownload(url, fileName, category, priority, speedLimit, hash)
                 .onSuccess { id ->
                     emitEvent(UiEvent.Success("Descarga añadida correctamente"))
                     dismissAddDownloadDialog()
@@ -251,17 +247,44 @@ class DownloadViewModel(
 
     /**
      * Elimina una descarga
-     * @param deleteFile Si es true, elimina también el archivo del disco
      */
-    fun removeDownload(id: String, deleteFile: Boolean = false) {
+    fun removeDownload(id: String) {
         viewModelScope.launch {
-            downloadManager.removeDownload(id, deleteFile)
+            downloadManager.removeDownload(id)
                 .onSuccess {
                     emitEvent(UiEvent.Info("Descarga eliminada"))
                 }
                 .onFailure { error ->
                     emitEvent(UiEvent.Error("Error al eliminar: ${error.message}"))
                 }
+        }
+    }
+
+    /**
+     * Abre la carpeta donde está el archivo descargado
+     */
+    fun openFileLocation(id: String) {
+        viewModelScope.launch {
+            val download = filteredDownloads.value.find { it.id == id }
+            if (download == null) {
+                emitEvent(UiEvent.Error("Descarga no encontrada"))
+                return@launch
+            }
+
+            val filePath = when (val status = download.status) {
+                is com.dam2.flashdownloader.domain.model.DownloadStatus.Completed -> status.filePath
+                else -> {
+                    emitEvent(UiEvent.Error("La descarga debe estar completada para abrir su ubicación"))
+                    return@launch
+                }
+            }
+
+            val success = com.dam2.flashdownloader.utils.FileOpener.openFileLocation(filePath)
+            if (success) {
+                emitEvent(UiEvent.Success("Carpeta abierta"))
+            } else {
+                emitEvent(UiEvent.Error("No se pudo abrir la carpeta del archivo"))
+            }
         }
     }
 
@@ -365,17 +388,22 @@ class DownloadViewModel(
         }
     }
 
-    /**
-     * Reordena una descarga mediante drag & drop
-     * @param fromIndex Índice actual
-     * @param toIndex Índice destino
-     */
     fun moveDownload(fromIndex: Int, toIndex: Int) {
-        viewModelScope.launch {
-            downloadManager.reorderDownload(fromIndex, toIndex)
-                .onFailure { error ->
-                    emitEvent(UiEvent.Error(error.message ?: "Error al reordenar"))
+        val currentFiltered = filteredDownloads.value
+        // Validar índices en la lista filtrada (lo que ve el usuario)
+        if (fromIndex in currentFiltered.indices && toIndex in currentFiltered.indices) {
+            val fromItem = currentFiltered[fromIndex]
+            val toItem = currentFiltered[toIndex]
+            
+            // Obtener lista completa actual para calcular índices reales
+            val fullList = downloads.value
+            val realToIndex = fullList.indexOfFirst { it.id == toItem.id }
+            
+            if (realToIndex != -1) {
+                viewModelScope.launch {
+                    downloadManager.moveDownloadToPosition(fromItem.id, realToIndex)
                 }
+            }
         }
     }
 
@@ -427,7 +455,6 @@ class DownloadViewModel(
      */
     fun toggleTheme() {
         _isDarkTheme.update { !it }
-        settingsRepository.setIsDarkTheme(_isDarkTheme.value)
     }
 
     /**
@@ -456,7 +483,8 @@ class DownloadViewModel(
                 addDownloadUrl = "",
                 addDownloadFileName = "",
                 addDownloadCategory = null,
-                addDownloadPriority = Priority.MEDIUM
+                addDownloadPriority = Priority.MEDIUM,
+                addDownloadHash = "" // ✅ Limpiar hash también
             )
         }
     }
@@ -487,6 +515,13 @@ class DownloadViewModel(
      */
     fun updateAddDownloadPriority(priority: Priority) {
         _uiState.update { it.copy(addDownloadPriority = priority) }
+    }
+
+    /**
+     * Actualiza el hash del diálogo
+     */
+    fun updateAddDownloadHash(hash: String) {
+        _uiState.update { it.copy(addDownloadHash = hash) }
     }
 
     /**
@@ -611,6 +646,47 @@ class DownloadViewModel(
     // SECCIÓN 9: UTILIDADES
 
     /**
+     * Verifica la integridad de una descarga completada mediante hash
+     * @param id ID de la descarga
+     * @param expectedHash Hash esperado (MD5, SHA-1 o SHA-256 detectado automáticamente por longitud)
+     */
+    fun verifyDownloadIntegrity(id: String, expectedHash: String) {
+        viewModelScope.launch {
+            // Validar que el hash no esté vacío
+            if (expectedHash.isBlank()) {
+                emitEvent(UiEvent.Error("El hash no puede estar vacío"))
+                return@launch
+            }
+
+            // Validar formato hexadecimal
+            if (!expectedHash.matches(Regex("^[0-9a-fA-F]+$"))) {
+                emitEvent(UiEvent.Error("El hash debe estar en formato hexadecimal"))
+                return@launch
+            }
+
+            // Validar longitud (MD5=32, SHA-1=40, SHA-256=64)
+            if (expectedHash.length !in listOf(32, 40, 64)) {
+                emitEvent(UiEvent.Error("Hash inválido. Longitud esperada: 32 (MD5), 40 (SHA-1) o 64 (SHA-256)"))
+                return@launch
+            }
+
+            emitEvent(UiEvent.Info("Verificando integridad..."))
+
+            downloadManager.verifyIntegrity(id, expectedHash)
+                .onSuccess { isValid ->
+                    if (isValid) {
+                        emitEvent(UiEvent.Success("✓ Verificación exitosa: El archivo es íntegro"))
+                    } else {
+                        emitEvent(UiEvent.Error("✗ Verificación fallida: El hash no coincide (archivo corrupto o modificado)"))
+                    }
+                }
+                .onFailure { error ->
+                    emitEvent(UiEvent.Error("Error al verificar: ${error.message}"))
+                }
+        }
+    }
+
+    /**
      * Emite un evento de UI
      */
     private suspend fun emitEvent(event: UiEvent) {
@@ -641,6 +717,7 @@ data class DownloadUiState(
     val addDownloadFileName: String = "",
     val addDownloadCategory: Category? = null,
     val addDownloadPriority: Priority = Priority.MEDIUM,
+    val addDownloadHash: String = "", // ✅ Hash SHA-256 opcional para verificación
     val selectedCategoryFilter: Category? = null,
     val selectedStatusFilter: DownloadStatusFilter? = null,
     val searchQuery: String = "",

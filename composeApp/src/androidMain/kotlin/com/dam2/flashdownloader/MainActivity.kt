@@ -1,77 +1,61 @@
 package com.dam2.flashdownloader
 
-import android.Manifest
-import android.content.Intent
-import android.content.pm.PackageManager
-import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.content.ContextCompat
-import com.dam2.flashdownloader.service.DownloadService
 import com.dam2.flashdownloader.ui.DownloadApp
 
+import android.Manifest
+import android.content.Intent
+import android.os.Build
+import androidx.core.app.ActivityCompat
+import com.dam2.flashdownloader.domain.manager.DownloadManager
+import com.dam2.flashdownloader.domain.model.DownloadStatus
+import com.dam2.flashdownloader.service.DownloadService
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
+import org.koin.android.ext.android.inject
+
 class MainActivity : ComponentActivity() {
-
-    // Launcher para solicitar permiso de notificaciones (Android 13+)
-    private val notificationPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        if (isGranted) {
-            // Permiso concedido, iniciar servicio
-            startDownloadService()
-        } else {
-            // Permiso denegado, aún así iniciar servicio (notificación no se mostrará)
-            startDownloadService()
-        }
-    }
-
+    
+    private val downloadManager: DownloadManager by inject()
+    
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
-
-        // Solicitar permiso de notificaciones si es necesario (Android 13+)
+        
+        // Request permissions
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            when {
-                ContextCompat.checkSelfPermission(
-                    this,
-                    Manifest.permission.POST_NOTIFICATIONS
-                ) == PackageManager.PERMISSION_GRANTED -> {
-                    // Permiso ya concedido
-                    startDownloadService()
-                }
-                else -> {
-                    // Solicitar permiso
-                    notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                }
-            }
-        } else {
-            // Android < 13, no requiere permiso de notificaciones
-            startDownloadService()
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                101
+            )
         }
 
         setContent {
             DownloadApp()
         }
-    }
-
-    /**
-     * Inicia el servicio de descargas en segundo plano
-     */
-    private fun startDownloadService() {
-        val intent = Intent(this, DownloadService::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(intent)
-        } else {
-            startService(intent)
-        }
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        // El servicio continúa ejecutándose en segundo plano
-        // No detenemos el servicio aquí para permitir descargas en background
+        
+        // Observe downloads to start service
+        downloadManager.downloads
+            .onEach { downloads ->
+                val hasActive = downloads.any { 
+                    it.status is DownloadStatus.Downloading || it.status is DownloadStatus.Queued 
+                }
+                
+                if (hasActive) {
+                    val intent = Intent(this, DownloadService::class.java)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        startForegroundService(intent)
+                    } else {
+                        startService(intent)
+                    }
+                }
+            }
+            .launchIn(CoroutineScope(Dispatchers.Main))
     }
 }

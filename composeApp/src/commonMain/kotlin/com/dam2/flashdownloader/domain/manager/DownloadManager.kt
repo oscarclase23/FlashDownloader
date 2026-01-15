@@ -37,6 +37,7 @@ interface DownloadManager {
      * @param fileName Nombre del archivo (opcional, se detecta automáticamente)
      * @param category Categoría (opcional, se detecta desde la extensión)
      * @param priority Prioridad de la descarga
+     * @param hash Hash SHA-256 esperado para verificación de integridad (opcional)
      * @return ID de la descarga creada
      */
     suspend fun addDownload(
@@ -44,7 +45,8 @@ interface DownloadManager {
         fileName: String? = null,
         category: Category? = null,
         priority: Priority = Priority.MEDIUM,
-        speedLimit: Long? = null
+        speedLimit: Long? = null,
+        hash: String? = null
     ): Result<String>
 
     /**
@@ -77,20 +79,13 @@ interface DownloadManager {
 
     /**
      * Elimina una descarga de la lista
-     * @param id ID de la descarga
-     * @param deleteFile Si es true, elimina también el archivo del disco
      */
-    suspend fun removeDownload(id: String, deleteFile: Boolean = false): Result<Unit>
+    suspend fun removeDownload(id: String): Result<Unit>
 
     /**
      * Pausa todas las descargas activas
      */
     suspend fun pauseAll(): Result<Unit>
-
-    /**
-     * Pausa todas las descargas activas (alias de pauseAll)
-     */
-    suspend fun pauseAllDownloads(): Result<Unit>
 
     /**
      * Reanuda todas las descargas pausadas
@@ -117,13 +112,6 @@ interface DownloadManager {
      * Mueve una descarga una posición abajo en la cola
      */
     suspend fun moveDown(id: String): Result<Unit>
-    
-    /**
-     * Reordena una descarga desde una posición a otra (para drag & drop)
-     * @param fromIndex Índice actual del elemento
-     * @param toIndex Índice destino
-     */
-    suspend fun reorderDownload(fromIndex: Int, toIndex: Int): Result<Unit>
 
     /**
      * Cambia el límite de descargas simultáneas
@@ -146,6 +134,11 @@ interface DownloadManager {
      * Limpia todas las descargas completadas
      */
     suspend fun clearCompleted(): Result<Unit>
+
+    /**
+     * Mueve una descarga a una posición específica en la lista
+     */
+    suspend fun moveDownloadToPosition(id: String, newIndex: Int): Result<Unit>
 
     /**
      * Reintenta una descarga fallida

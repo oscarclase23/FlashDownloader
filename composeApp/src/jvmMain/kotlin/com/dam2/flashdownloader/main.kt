@@ -8,6 +8,9 @@ import com.dam2.flashdownloader.di.commonModule
 import com.dam2.flashdownloader.di.platformModule
 import com.dam2.flashdownloader.ui.DownloadApp
 import org.koin.compose.KoinApplication
+import org.jetbrains.compose.resources.painterResource
+import flashdownloader.composeapp.generated.resources.Res
+import flashdownloader.composeapp.generated.resources.logo
 
 fun main() = application {
     val windowState = rememberWindowState(
@@ -23,7 +26,8 @@ fun main() = application {
         Window(
             onCloseRequest = ::exitApplication,
             title = "Flash Downloader - Gestor de descargas multiplataforma",
-            state = windowState
+            state = windowState,
+            icon = painterResource(Res.drawable.logo)
         ) {
             DownloadApp()
         }

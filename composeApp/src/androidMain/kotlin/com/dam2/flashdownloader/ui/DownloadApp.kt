@@ -1,9 +1,9 @@
 package com.dam2.flashdownloader.ui
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -11,8 +11,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.dam2.flashdownloader.domain.model.Category
-import com.dam2.flashdownloader.domain.model.DownloadStatus
 import com.dam2.flashdownloader.presentation.viewmodel.DownloadStatusFilter
 import com.dam2.flashdownloader.presentation.viewmodel.DownloadViewModel
 import com.dam2.flashdownloader.presentation.viewmodel.UiEvent
@@ -21,14 +21,30 @@ import com.dam2.flashdownloader.ui.components.StatisticsCard
 import com.dam2.flashdownloader.ui.dialogs.AddDownloadBottomSheet
 import com.dam2.flashdownloader.ui.dialogs.SettingsBottomSheet
 import com.dam2.flashdownloader.ui.theme.FlashDownloaderTheme
-import com.dam2.flashdownloader.ui.utils.draggableItem
 import com.dam2.flashdownloader.ui.utils.rememberDragDropState
+import com.dam2.flashdownloader.ui.utils.dragGestureHandler
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
+import org.jetbrains.compose.resources.painterResource
+import flashdownloader.composeapp.generated.resources.Res
+import flashdownloader.composeapp.generated.resources.logo
+import com.dam2.flashdownloader.domain.model.DownloadStatus
 
 /**
- * Aplicación principal de Android con sistema de pestañas
+ * Filtro de estado para el segundo spinner
+ */
+enum class StatusFilter(val displayName: String) {
+    ALL("Todas"),
+    ACTIVE("Activas"),
+    COMPLETED("Completadas"),
+    FAILED("Fallidas"),
+    QUEUED("En cola"),
+    PAUSED("Pausadas")
+}
+
+/**
+ * Aplicación principal de Android
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -46,9 +62,6 @@ fun DownloadApp(
     val scope = rememberCoroutineScope()
     val addDownloadSheetState = rememberModalBottomSheetState()
     val settingsSheetState = rememberModalBottomSheetState()
-
-    // Estado de las pestañas
-    var selectedTabIndex by remember { mutableStateOf(0) }
 
     // Observar eventos de UI
     LaunchedEffect(Unit) {
@@ -76,80 +89,39 @@ fun DownloadApp(
         }
     }
 
-    // Filtrar descargas según la pestaña seleccionada
-    val filteredDownloads = remember(downloads, selectedTabIndex) {
-        when (selectedTabIndex) {
-            0 -> downloads // Todos
-            1 -> downloads.filter { // Activos (Descargando + En cola)
-                it.status is DownloadStatus.Downloading || it.status is DownloadStatus.Queued
-            }
-            2 -> downloads.filter { // Completados
-                it.status is DownloadStatus.Completed
-            }
-            else -> downloads
-        }
+    // Drag Drop State
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val dragDropState = rememberDragDropState(listState) { from, to ->
+        viewModel.moveDownload(from, to)
     }
 
     FlashDownloaderTheme(darkTheme = isDarkTheme) {
+        var selectedStatus by remember { mutableStateOf(StatusFilter.ALL) }
+
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = { Text("Flash Downloader") },
-                    actions = {
-                        // Filtros
-                        var showFilterMenu by remember { mutableStateOf(false) }
-                        IconButton(onClick = { showFilterMenu = true }) {
-                            Icon(Icons.Default.FilterList, "Filtros")
-                        }
-                        DropdownMenu(
-                            expanded = showFilterMenu,
-                            onDismissRequest = { showFilterMenu = false }
+                    title = {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                "Categorías",
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                                style = MaterialTheme.typography.labelSmall
+                            // Logo de la aplicación
+                            Image(
+                                painter = painterResource(Res.drawable.logo),
+                                contentDescription = "Flash Downloader Logo",
+                                modifier = Modifier.size(28.dp)
                             )
-                            DropdownMenuItem(
-                                text = { Text("Todas") },
-                                onClick = {
-                                    viewModel.filterByCategory(null)
-                                    showFilterMenu = false
-                                }
+                            Text("Flash Downloader")
+                        }
+                    },
+                    actions = {
+                        // Icono de tema oscuro (visible)
+                        IconButton(onClick = { viewModel.toggleTheme() }) {
+                            Icon(
+                                if (isDarkTheme) Icons.Default.LightMode else Icons.Default.DarkMode,
+                                "Cambiar tema"
                             )
-                            Category.entries.forEach { category ->
-                                DropdownMenuItem(
-                                    text = { Text("${category.iconName} ${category.displayName}") },
-                                    onClick = {
-                                        viewModel.filterByCategory(category)
-                                        showFilterMenu = false
-                                    }
-                                )
-                            }
-
-                            HorizontalDivider()
-
-                            Text(
-                                "Estados",
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                                style = MaterialTheme.typography.labelSmall
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Todos") },
-                                onClick = {
-                                    viewModel.filterByStatus(null)
-                                    showFilterMenu = false
-                                }
-                            )
-                            DownloadStatusFilter.entries.forEach { status ->
-                                DropdownMenuItem(
-                                    text = { Text(status.name.lowercase().replaceFirstChar { it.uppercase() }) },
-                                    onClick = {
-                                        viewModel.filterByStatus(status)
-                                        showFilterMenu = false
-                                    }
-                                )
-                            }
                         }
 
                         // Menú de opciones
@@ -185,20 +157,7 @@ fun DownloadApp(
                                     showMenu = false
                                 }
                             )
-                            HorizontalDivider()
-                            DropdownMenuItem(
-                                text = { Text(if (isDarkTheme) "Tema claro" else "Tema oscuro") },
-                                leadingIcon = {
-                                    Icon(
-                                        if (isDarkTheme) Icons.Default.LightMode else Icons.Default.DarkMode,
-                                        null
-                                    )
-                                },
-                                onClick = {
-                                    viewModel.toggleTheme()
-                                    showMenu = false
-                                }
-                            )
+                            Divider()
                             DropdownMenuItem(
                                 text = { Text("Configuración") },
                                 leadingIcon = { Icon(Icons.Default.Settings, null) },
@@ -245,65 +204,121 @@ fun DownloadApp(
                     shape = MaterialTheme.shapes.large
                 )
 
+                // Fila de spinners (categorías y estados)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // Spinner de categorías
+                    var categoryExpanded by remember { mutableStateOf(false) }
+                    ExposedDropdownMenuBox(
+                        expanded = categoryExpanded,
+                        onExpandedChange = { categoryExpanded = it },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        OutlinedTextField(
+                            value = uiState.selectedCategoryFilter?.displayName ?: "Todas",
+                            onValueChange = {},
+                            readOnly = true,
+                            leadingIcon = { Icon(Icons.Default.FilterList, null) },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = categoryExpanded) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .menuAnchor(),
+                            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+                            singleLine = true
+                        )
+
+                        ExposedDropdownMenu(
+                            expanded = categoryExpanded,
+                            onDismissRequest = { categoryExpanded = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("📋 Todas") },
+                                onClick = {
+                                    viewModel.filterByCategory(null)
+                                    categoryExpanded = false
+                                }
+                            )
+                            Category.entries.forEach { category ->
+                                DropdownMenuItem(
+                                    text = { Text("${category.iconName} ${category.displayName}") },
+                                    onClick = {
+                                        viewModel.filterByCategory(category)
+                                        categoryExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    // Spinner de estados
+                    var statusExpanded by remember { mutableStateOf(false) }
+                    ExposedDropdownMenuBox(
+                        expanded = statusExpanded,
+                        onExpandedChange = { statusExpanded = it },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        OutlinedTextField(
+                            value = selectedStatus.displayName,
+                            onValueChange = {},
+                            readOnly = true,
+                            leadingIcon = { Icon(Icons.Default.FilterAlt, null) },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = statusExpanded) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .menuAnchor(),
+                            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+                            singleLine = true
+                        )
+
+                        ExposedDropdownMenu(
+                            expanded = statusExpanded,
+                            onDismissRequest = { statusExpanded = false }
+                        ) {
+                            StatusFilter.entries.forEach { status ->
+                                DropdownMenuItem(
+                                    text = { Text(status.displayName) },
+                                    onClick = {
+                                        selectedStatus = status
+                                        statusExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Filtrar descargas según los dos spinners
+                val filteredDownloads = remember(downloads, selectedStatus) {
+                    downloads.filter { download ->
+                        when (selectedStatus) {
+                            StatusFilter.ALL -> true
+                            StatusFilter.ACTIVE -> download.status is DownloadStatus.Downloading
+                            StatusFilter.QUEUED -> download.status is DownloadStatus.Queued
+                            StatusFilter.PAUSED -> download.status is DownloadStatus.Paused
+                            StatusFilter.COMPLETED -> download.status is DownloadStatus.Completed
+                            StatusFilter.FAILED -> download.status is DownloadStatus.Failed
+                        }
+                    }
+                }
+
                 // Card de estadísticas
                 StatisticsCard(statistics = statistics)
 
-                // Sistema de pestañas
-                TabRow(
-                    selectedTabIndex = selectedTabIndex,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Tab(
-                        selected = selectedTabIndex == 0,
-                        onClick = { selectedTabIndex = 0 },
-                        text = { Text("Todos") },
-                        icon = { Icon(Icons.Default.List, null) }
-                    )
-                    Tab(
-                        selected = selectedTabIndex == 1,
-                        onClick = { selectedTabIndex = 1 },
-                        text = { Text("Activos") },
-                        icon = { 
-                            Badge(
-                                containerColor = MaterialTheme.colorScheme.primary
-                            ) {
-                                Text(statistics.activeDownloads.toString())
-                            }
-                        }
-                    )
-                    Tab(
-                        selected = selectedTabIndex == 2,
-                        onClick = { selectedTabIndex = 2 },
-                        text = { Text("Completados") },
-                        icon = { 
-                            Badge(
-                                containerColor = MaterialTheme.colorScheme.tertiary
-                            ) {
-                                Text(statistics.completedDownloads.toString())
-                            }
-                        }
-                    )
-                }
-
-                // Lista de descargas filtrada por pestaña
+                // Lista de descargas
                 if (filteredDownloads.isEmpty()) {
                     EmptyState(
-                        modifier = Modifier.fillMaxSize(),
-                        onAddDownload = { viewModel.showAddDownloadDialog() },
-                        tabIndex = selectedTabIndex
+                        modifier = Modifier.fillMaxSize()
                     )
                 } else {
-                    val listState = rememberLazyListState()
-                    val dragDropState = rememberDragDropState(
-                        lazyListState = listState,
-                        onMove = { fromIndex, toIndex ->
-                            viewModel.moveDownload(fromIndex, toIndex)
-                        }
-                    )
-                    
                     LazyColumn(
                         state = listState,
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .dragGestureHandler(dragDropState),
                         contentPadding = PaddingValues(vertical = 8.dp)
                     ) {
                         items(
@@ -316,12 +331,13 @@ fun DownloadApp(
                                 onPause = { viewModel.pauseDownload(download.id) },
                                 onResume = { viewModel.resumeDownload(download.id) },
                                 onCancel = { viewModel.cancelDownload(download.id) },
-                                onRemove = { deleteFile -> 
-                                    viewModel.removeDownload(download.id, deleteFile) 
-                                },
+                                onRemove = { viewModel.removeDownload(download.id) },
                                 onRetry = { viewModel.retryDownload(download.id) },
+                                onOpenFolder = { viewModel.openFileLocation(download.id) },
                                 onClick = { viewModel.showDownloadDetails(download.id) },
-                                modifier = Modifier.draggableItem(dragDropState, index)
+                                dragHandleModifier = if (uiState.searchQuery.isEmpty()) Modifier else Modifier,
+                                dragDropState = if (uiState.searchQuery.isEmpty()) dragDropState else null,
+                                index = index
                             )
                         }
                     }
@@ -340,12 +356,15 @@ fun DownloadApp(
                     onCategoryChange = viewModel::updateAddDownloadCategory,
                     priority = uiState.addDownloadPriority,
                     onPriorityChange = viewModel::updateAddDownloadPriority,
+                    hash = uiState.addDownloadHash,
+                    onHashChange = viewModel::updateAddDownloadHash,
                     onConfirm = {
                         viewModel.addDownload(
                             url = uiState.addDownloadUrl,
                             fileName = uiState.addDownloadFileName.ifBlank { null },
                             category = uiState.addDownloadCategory,
-                            priority = uiState.addDownloadPriority
+                            priority = uiState.addDownloadPriority,
+                            hash = uiState.addDownloadHash.ifBlank { null }
                         )
                     },
                     onDismiss = viewModel::dismissAddDownloadDialog,
@@ -365,50 +384,47 @@ fun DownloadApp(
                     onDismiss = viewModel::dismissSettingsDialog
                 )
             }
+
+            // Detalles de descarga
+            if (uiState.showDetailsDialog && uiState.selectedDownloadId != null) {
+                val selectedDownload = downloads.find { it.id == uiState.selectedDownloadId }
+                if (selectedDownload != null) {
+                    val detailsSheetState = rememberModalBottomSheetState()
+                    com.dam2.flashdownloader.ui.dialogs.DownloadDetailsBottomSheet(
+                        download = selectedDownload,
+                        sheetState = detailsSheetState,
+                        onDismiss = viewModel::dismissDownloadDetails
+                    )
+                }
+            }
         }
     }
 }
 
 @Composable
 private fun EmptyState(
-    onAddDownload: () -> Unit,
-    tabIndex: Int,
     modifier: Modifier = Modifier
 ) {
-    val (emoji, title, subtitle) = when (tabIndex) {
-        1 -> Triple("⏸️", "No hay descargas activas", "Las descargas activas aparecerán aquí")
-        2 -> Triple("✅", "No hay descargas completadas", "Las descargas completadas aparecerán aquí")
-        else -> Triple("📥", "No hay descargas", "Toca el botón + para comenzar")
-    }
-
     Column(
         modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
         Text(
-            text = emoji,
+            text = "📥",
             style = MaterialTheme.typography.displayLarge
         )
         Spacer(modifier = Modifier.height(16.dp))
         Text(
-            text = title,
+            text = "No hay descargas",
             style = MaterialTheme.typography.headlineMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = subtitle,
+            text = "Toca el botón + para comenzar",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        if (tabIndex == 0) {
-            Spacer(modifier = Modifier.height(24.dp))
-            FilledTonalButton(onClick = onAddDownload) {
-                Icon(Icons.Default.Add, null)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Añadir descarga")
-            }
-        }
     }
 }

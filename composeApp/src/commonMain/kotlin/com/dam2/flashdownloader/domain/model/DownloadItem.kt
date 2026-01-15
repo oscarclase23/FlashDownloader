@@ -24,6 +24,7 @@ data class DownloadItem(
             is DownloadStatus.Downloading -> status.totalBytes
             is DownloadStatus.Paused -> status.totalBytes
             is DownloadStatus.Completed -> status.totalBytes
+            is DownloadStatus.Queued -> status.totalBytes
             else -> metadata.totalBytes
         }
 
@@ -36,6 +37,7 @@ data class DownloadItem(
             is DownloadStatus.Paused -> status.bytesDownloaded
             is DownloadStatus.Failed -> status.bytesDownloaded
             is DownloadStatus.Completed -> status.totalBytes
+            is DownloadStatus.Queued -> status.bytesDownloaded
             else -> 0L
         }
 
@@ -47,45 +49,6 @@ data class DownloadItem(
             is DownloadStatus.Downloading -> status.speed
             else -> 0L
         }
-
-    /**
-     * Formatea el tamaño en una cadena legible
-     */
-    fun formatSize(bytes: Long): String {
-        return when {
-            bytes < 1024 -> "$bytes B"
-            bytes < 1024 * 1024 -> "${bytes / 1024} KB"
-            bytes < 1024 * 1024 * 1024 -> String.format("%.2f MB", bytes / (1024.0 * 1024.0))
-            else -> String.format("%.2f GB", bytes / (1024.0 * 1024.0 * 1024.0))
-        }
-    }
-
-    /**
-     * Formatea la velocidad en una cadena legible
-     */
-    fun formatSpeed(bytesPerSecond: Long): String {
-        return when {
-            bytesPerSecond < 1024 -> "$bytesPerSecond B/s"
-            bytesPerSecond < 1024 * 1024 -> "${bytesPerSecond / 1024} KB/s"
-            else -> String.format("%.2f MB/s", bytesPerSecond / (1024.0 * 1024.0))
-        }
-    }
-
-    /**
-     * Formatea el tiempo restante en una cadena legible
-     */
-    fun formatTimeRemaining(seconds: Long): String {
-        if (seconds < 0) return "Calculando..."
-        val hours = seconds / 3600
-        val minutes = (seconds % 3600) / 60
-        val secs = seconds % 60
-
-        return when {
-            hours > 0 -> "${hours}h ${minutes}m"
-            minutes > 0 -> "${minutes}m ${secs}s"
-            else -> "${secs}s"
-        }
-    }
 }
 
 /**
@@ -101,6 +64,7 @@ data class DownloadMetadata(
 
 /**
  * Estadísticas globales de todas las descargas
+ * Modelo de dominio puro sin lógica de presentación
  */
 data class DownloadStatistics(
     val totalDownloads: Int = 0,
@@ -112,21 +76,4 @@ data class DownloadStatistics(
     val totalBytesDownloaded: Long = 0L,
     val currentGlobalSpeed: Long = 0L,
     val averageSpeed: Long = 0L
-) {
-    fun formatTotalSize(): String {
-        return when {
-            totalBytesDownloaded < 1024 -> "$totalBytesDownloaded B"
-            totalBytesDownloaded < 1024 * 1024 -> "${totalBytesDownloaded / 1024} KB"
-            totalBytesDownloaded < 1024 * 1024 * 1024 -> String.format("%.2f MB", totalBytesDownloaded / (1024.0 * 1024.0))
-            else -> String.format("%.2f GB", totalBytesDownloaded / (1024.0 * 1024.0 * 1024.0))
-        }
-    }
-
-    fun formatSpeed(bytesPerSecond: Long): String {
-        return when {
-            bytesPerSecond < 1024 -> "$bytesPerSecond B/s"
-            bytesPerSecond < 1024 * 1024 -> "${bytesPerSecond / 1024} KB/s"
-            else -> String.format("%.2f MB/s", bytesPerSecond / (1024.0 * 1024.0))
-        }
-    }
-}
+)
