@@ -13,6 +13,7 @@ import androidx.core.app.ActivityCompat
 import com.dam2.flashdownloader.domain.manager.DownloadManager
 import com.dam2.flashdownloader.domain.model.DownloadStatus
 import com.dam2.flashdownloader.service.DownloadService
+import com.dam2.flashdownloader.utils.FileOpener
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.launchIn
@@ -26,6 +27,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+
+        FileOpener.initialize(this)
         
         // Request permissions
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
