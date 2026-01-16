@@ -131,11 +131,17 @@ compose.desktop {
 
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
-            packageName = "com.dam2.flashdownloader"
+            packageName = "FlashDownloader"
             packageVersion = "1.0.0"
 
             // Incluir todas las dependencias necesarias
             modules("java.sql", "jdk.unsupported")
+            windows {
+                menu = true
+                perUserInstall = true
+                // Este ID es 100% necesario para MSI. Úsalo tal cual.
+                upgradeUuid = "90839845-6623-4567-8910-334455667788"
+            }
         }
 
         // ✅ CRÍTICO: Configuración JVM para manejar archivos muy grandes (2GB+)
