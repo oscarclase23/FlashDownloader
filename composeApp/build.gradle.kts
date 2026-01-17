@@ -131,14 +131,15 @@ compose.desktop {
 
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Exe, TargetFormat.Deb)
+
+            // ✅ AÑADE ESTO para que el archivo se llame "FlashDownloader-1.0.0.exe"
+            packageName = "FlashDownloader"
             packageVersion = "1.0.0"
 
-            // Incluir todas las dependencias necesarias
             modules("java.sql", "jdk.unsupported")
             windows {
                 menu = true
                 perUserInstall = true
-                // Este ID es 100% necesario para MSI. Úsalo tal cual.
                 upgradeUuid = "90839845-6623-4567-8910-334455667788"
             }
         }
