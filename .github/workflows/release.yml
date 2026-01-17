@@ -3,7 +3,7 @@ name: Build and Release
 on:
   push:
     tags:
-      - 'v*' # Se activa al subir un tag como v1.0, v1.0.0, etc.
+      - 'v*'
 
 jobs:
   # --- JOB 1: ANDROID (APK) ---
@@ -21,11 +21,9 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      # Generamos el APK de Debug
       - name: Build Android APK
         run: ./gradlew :composeApp:assembleDebug
 
-      # Renombrar el APK para que tenga un nombre amigable
       - name: Rename APK
         run: |
           mv composeApp/build/outputs/apk/debug/composeApp-debug.apk composeApp/build/outputs/apk/debug/FlashDownloader-Android.apk
@@ -48,18 +46,28 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      # ✅ CAMBIO 1: Ejecutamos ambas tareas: packageMsi y packageExe
-      - name: Build Windows Installers
-        run: ./gradlew :composeApp:packageMsi :composeApp:packageExe
+      - name: Install WiX Toolset
+        run: |
+          choco install wixtoolset -y
+          refreshenv
 
-      # ✅ CAMBIO 2: Subimos tanto los .msi como los .exe
+      - name: Build Windows Installers
+        shell: cmd
+        run: .\gradlew.bat :composeApp:packageMsi :composeApp:packageExe
+
+      # Esto es vital para que el paso de 'release' los encuentre después
+      - name: Prepare Windows Artifacts
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts
+          # Mueve cualquier .msi o .exe que haya generado
+          Move-Item -Path composeApp\build\compose\binaries\main\msi\*.msi -Destination artifacts\
+          Move-Item -Path composeApp\build\compose\binaries\main\exe\*.exe -Destination artifacts\
+
       - name: Upload Windows Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: windows-installers
-          path: |
-            composeApp/build/compose/binaries/main/msi/*.msi
-            composeApp/build/compose/binaries/main/exe/*.exe
+          path: artifacts/*
 
   # --- JOB 3: PUBLICAR RELEASE ---
   release:
@@ -85,7 +93,6 @@ jobs:
           name: Release ${{ github.ref_name }}
           draft: false
           prerelease: false
-          # ✅ CAMBIO 3: Incluimos el patrón *.exe para que se adjunte a la release
           files: |
             *.apk
             *.msi
