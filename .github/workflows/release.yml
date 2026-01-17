@@ -25,7 +25,7 @@ jobs:
       - name: Build Android APK
         run: ./gradlew :composeApp:assembleDebug
 
-      # ✅ PASO NUEVO: Renombrar el archivo feo a uno bonito
+      # Renombrar el APK para que tenga un nombre amigable
       - name: Rename APK
         run: |
           mv composeApp/build/outputs/apk/debug/composeApp-debug.apk composeApp/build/outputs/apk/debug/FlashDownloader-Android.apk
@@ -34,10 +34,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: android-apk
-          # Ahora subimos el archivo con el nombre nuevo
           path: composeApp/build/outputs/apk/debug/FlashDownloader-Android.apk
 
-  # --- JOB 2: WINDOWS (MSI) ---
+  # --- JOB 2: WINDOWS (MSI y EXE) ---
   build-desktop:
     runs-on: windows-latest
     steps:
@@ -49,23 +48,22 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      # ✅ CAMBIO 1: Ejecutamos los dos comandos seguidos
+      # ✅ CAMBIO 1: Ejecutamos ambas tareas: packageMsi y packageExe
       - name: Build Windows Installers
         run: ./gradlew :composeApp:packageMsi :composeApp:packageExe
 
-      # ✅ CAMBIO 2: Subimos ambos archivos en el mismo artefacto
+      # ✅ CAMBIO 2: Subimos tanto los .msi como los .exe
       - name: Upload Windows Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: windows-installers
-          # Usamos la barra vertical | para poner varias rutas
           path: |
             composeApp/build/compose/binaries/main/msi/*.msi
             composeApp/build/compose/binaries/main/exe/*.exe
 
   # --- JOB 3: PUBLICAR RELEASE ---
   release:
-    needs: [ build-android, build-desktop ]
+    needs: [build-android, build-desktop]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -87,7 +85,7 @@ jobs:
           name: Release ${{ github.ref_name }}
           draft: false
           prerelease: false
-          # ✅ CAMBIO 3: Incluimos ambos patrones para que suba todo lo que encuentre
+          # ✅ CAMBIO 3: Incluimos el patrón *.exe para que se adjunte a la release
           files: |
             *.apk
             *.msi
