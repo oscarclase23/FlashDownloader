@@ -130,8 +130,7 @@ compose.desktop {
         mainClass = "com.dam2.flashdownloader.MainKt"
 
         nativeDistributions {
-            targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
-            packageName = "FlashDownloader"
+            targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Exe, TargetFormat.Deb)
             packageVersion = "1.0.0"
 
             // Incluir todas las dependencias necesarias
